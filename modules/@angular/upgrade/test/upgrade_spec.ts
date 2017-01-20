@@ -10,6 +10,7 @@ import {ChangeDetectorRef, Class, Component, EventEmitter, Input, NO_ERRORS_SCHE
 import {async, fakeAsync, flushMicrotasks, tick} from '@angular/core/testing';
 import {BrowserModule} from '@angular/platform-browser';
 import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
+import {NgModel} from '@angular/forms';
 import * as angular from '@angular/upgrade/src/angular_js';
 import {UpgradeAdapter, UpgradeAdapterRef, sortProjectableNodes} from '@angular/upgrade/src/upgrade_adapter';
 
@@ -690,6 +691,83 @@ export function main() {
              }, 0);
            });
          }));
+
+      fit('should support NgModel', async(() => {
+        const adapter: UpgradeAdapter = new UpgradeAdapter(forwardRef(() => Ng2Module));
+        const ng1Module = angular.module('ng1', []);
+
+        let setValue: Function;
+        let setTouched: Function;
+        let ng2Instance: any;
+
+        const ng1 = () => {
+          return {
+            template: '<span>init<span>',
+            require: 'ngModel',
+            scope: {},
+            link: function(scope: any, element: any, attrs: any, ngModel: any) {
+              console.log('link');
+
+              setValue = function(value: any) {
+                element[0].textContent = value;
+                ngModel.$setViewValue(value);
+              };
+              setTouched = ngModel.$setTouched.bind(ngModel);
+
+              ngModel.$render = function() { console.log('$render', ngModel.$viewValue);
+                element[0].textContent = ngModel.$viewValue;
+              }; 
+            }
+          };
+        };
+        ng1Module.directive('ng1', ng1);
+
+        @Component({
+          selector: 'ng2',
+          template: '<ng1 [(ngModel)]="value2"></ng1> | {{value2}}'
+        })
+        class Ng2 {
+          value2 = 'A';
+
+          constructor(public zone: NgZone) {
+            ng2Instance = this;
+          }
+        }
+
+        const Ng2Module = NgModule({
+                            declarations: [adapter.upgradeNg1Component('ng1'), Ng2, NgModel],
+                            imports: [BrowserModule],
+                          }).Class({constructor: function() {}});
+
+        ng1Module.directive('ng2', adapter.downgradeNg2Component(Ng2));
+        const element = html(`<div><ng2></ng2></div>`);
+        adapter.bootstrap(element, ['ng1']).ready((ref) => {
+          // we need to do setTimeout, because the EventEmitter uses setTimeout to schedule
+          // events, and so without this we would not see the events processed.
+          setTimeout(() => {
+            expect(multiTrim(document.body.textContent)).toEqual('A | A');
+            expect(document.querySelector('ng1').classList.contains('ng-untouched'));
+
+            setTouched();
+            setTimeout(() => {
+              expect(document.querySelector('ng1').classList.contains('ng-touched'));
+
+              ng2Instance.zone.run(() => setValue('B'));
+              setTimeout(() => {
+                expect(ng2Instance.value2).toEqual('B');
+                expect(multiTrim(document.body.textContent)).toEqual('B | B');
+
+                // ng2Instance.value2 = 'C';
+                // setTimeout(() => {
+                //   expect(multiTrim(document.body.textContent)).toEqual('C | C');
+                // }, 0);
+              }, 0);
+            }, 0);
+
+            ref.dispose();
+          }, 0);
+        });
+      }));
 
       it('should support templateUrl fetched from $httpBackend', async(() => {
            const adapter: UpgradeAdapter = new UpgradeAdapter(forwardRef(() => Ng2Module));

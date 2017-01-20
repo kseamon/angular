@@ -6,10 +6,11 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Directive, DoCheck, ElementRef, EventEmitter, Inject, OnChanges, OnInit, SimpleChange, SimpleChanges, Type} from '@angular/core';
+import {Directive, DoCheck, ElementRef, EventEmitter, Inject, OnChanges, OnInit, SimpleChange, SimpleChanges, Type, forwardRef} from '@angular/core';
 
 import * as angular from './angular_js';
 import {NG1_COMPILE, NG1_CONTROLLER, NG1_HTTP_BACKEND, NG1_SCOPE, NG1_TEMPLATE_CACHE} from './constants';
+import {NG_VALUE_ACCESSOR} from '@angular/forms/src/directives/control_value_accessor';
 import {controllerKey} from './util';
 
 interface IBindingDestination {
@@ -33,6 +34,12 @@ const INITIAL_VALUE = {
 };
 const NOT_SUPPORTED: any = 'NOT_SUPPORTED';
 
+const VALUE_ACCESSOR: any = {
+  provide: NG_VALUE_ACCESSOR,
+  useExisting: forwardRef(() => UpgradeNg1ComponentAdapter),
+  multi: true
+};
+
 
 export class UpgradeNg1ComponentAdapterBuilder {
   type: Type<any>;
@@ -52,7 +59,17 @@ export class UpgradeNg1ComponentAdapterBuilder {
         CAMEL_CASE, (all: any /** TODO #9100 */, next: string) => '-' + next.toLowerCase());
     const self = this;
     this.type =
-        Directive({selector: selector, inputs: this.inputsRename, outputs: this.outputsRename})
+        Directive({
+          selector: selector,
+          inputs: this.inputsRename,
+          outputs: this.outputsRename,
+          // providers: [VALUE_ACCESSOR],
+          providers: [{
+            provide: NG_VALUE_ACCESSOR,
+            useExisting: forwardRef(() => this.type),
+            multi: true
+          }],
+        })
             .Class({
               constructor: [
                 new Inject(NG1_SCOPE), ElementRef,
@@ -66,7 +83,7 @@ export class UpgradeNg1ComponentAdapterBuilder {
               ngOnChanges: function() { /* needs to be here for ng2 to properly detect it */ },
               ngDoCheck: function() { /* needs to be here for ng2 to properly detect it */ },
               ngOnDestroy: function() { /* needs to be here for ng2 to properly detect it */ },
-              // writeValue: function() { /* needs to be here for NgModel support */ },
+              writeValue: function() { console.log('sup!') },
               // registerOnChange: function() { /* needs to be here for NgModel support */ },
               // registerOnTouched: function() { /* needs to be here for NgModel support */ },
             });
@@ -227,21 +244,21 @@ class NgModelControllerAdaptor {
     this.$render();
   }
 
-  $setViewValue(value: any) {
+  $setViewValue(value: any) {console.log('$setViewValue 1:', value);
     if (!this.$$updateValue(value)) return;
-
-    component.changeHandler && component.changeHandler(value, true);
+    console.log('$setViewValue 2:', this.$viewValue);
+    this.$$component.changeHandler && this.$$component.changeHandler(value, true);
   }
 
   $setTouched() {
     this.$touched = true;
     this.$untouched = false;
 
-    component.touchedHandler && component.touchedHandler();
+    this.$$component.touchedHandler && this.$$component.touchedHandler();
   }
 
   $setUntouched() {}
-  $render(): {}
+  $render() {}
 
   private $$updateValue(value: any) {
     if (this.$viewValue === value) return false;
@@ -368,13 +385,13 @@ class UpgradeNg1ComponentAdapter implements OnInit, OnChanges, DoCheck {
     }
   }
 
-  writeValue(value: any) {
+  writeValue(value: any) {console.log('writeValue', value);
     if (!this.ngModelController) return;
 
     this.ngModelController.$$writeValue(value);
   }
 
-  registerOnChange(fn: any) {
+  registerOnChange(fn: any) {console.log('registerOnChange');
     this.changeHandler = fn;
   }
 
@@ -416,7 +433,7 @@ class UpgradeNg1ComponentAdapter implements OnInit, OnChanges, DoCheck {
 
       // Glue Angular's ControlValueAccessor interface to AngularJS's ngModelController.
       if (name === 'ngModel') {
-        this.ngModelController = new NgModelControllerAdaptor(this);
+        return this.ngModelController = new NgModelControllerAdaptor(this);
       }
 
       if (name.charAt(0) == '^') {
