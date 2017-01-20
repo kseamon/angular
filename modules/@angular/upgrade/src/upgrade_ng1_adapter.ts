@@ -66,6 +66,9 @@ export class UpgradeNg1ComponentAdapterBuilder {
               ngOnChanges: function() { /* needs to be here for ng2 to properly detect it */ },
               ngDoCheck: function() { /* needs to be here for ng2 to properly detect it */ },
               ngOnDestroy: function() { /* needs to be here for ng2 to properly detect it */ },
+              // writeValue: function() { /* needs to be here for NgModel support */ },
+              // registerOnChange: function() { /* needs to be here for NgModel support */ },
+              // registerOnTouched: function() { /* needs to be here for NgModel support */ },
             });
   }
 
@@ -207,6 +210,18 @@ export class UpgradeNg1ComponentAdapterBuilder {
   }
 }
 
+/**
+ * A class that mimics a subset of the behavior of AngularJS's NgModelController.
+ */
+class NgModelAdaptor {
+  $viewValue = Number.NaN;
+  $modelValue = Number.NaN;
+
+  $render(): {}
+
+  $setViewValue(value: any, trigger: string): void;
+}
+
 class UpgradeNg1ComponentAdapter implements OnInit, OnChanges, DoCheck {
   private controllerInstance: IControllerInstance = null;
   destinationObj: IBindingDestination = null;
@@ -214,6 +229,7 @@ class UpgradeNg1ComponentAdapter implements OnInit, OnChanges, DoCheck {
   componentScope: angular.IScope;
   element: Element;
   $element: any = null;
+  ngModelController: NgModelAdaptor = null;
 
   constructor(
       private linkFn: angular.ILinkFn, scope: angular.IScope, private directive: angular.IDirective,
@@ -351,6 +367,12 @@ class UpgradeNg1ComponentAdapter implements OnInit, OnChanges, DoCheck {
         isOptional = true;
         name = name.substr(1);
       }
+
+      // Glue Angular's ControlValueAccessor interface to AngularJS's ngModelController.
+      if (name === 'ngModel') {
+        
+      }
+
       if (name.charAt(0) == '^') {
         searchParents = true;
         name = name.substr(1);
