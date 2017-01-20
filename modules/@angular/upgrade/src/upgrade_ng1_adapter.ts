@@ -213,13 +213,43 @@ export class UpgradeNg1ComponentAdapterBuilder {
 /**
  * A class that mimics a subset of the behavior of AngularJS's NgModelController.
  */
-class NgModelAdaptor {
+class NgModelControllerAdaptor {
   $viewValue = Number.NaN;
   $modelValue = Number.NaN;
+  $touched = false;
+  $untouched = true;
 
+  constructor(private $$component: UpgradeNg1ComponentAdapter) {}
+
+  $$writeValue(value: any) {
+    if (!this.$$updateValue(value)) return;
+
+    this.$render();
+  }
+
+  $setViewValue(value: any) {
+    if (!this.$$updateValue(value)) return;
+
+    component.changeHandler && component.changeHandler(value, true);
+  }
+
+  $setTouched() {
+    this.$touched = true;
+    this.$untouched = false;
+
+    component.touchedHandler && component.touchedHandler();
+  }
+
+  $setUntouched() {}
   $render(): {}
 
-  $setViewValue(value: any, trigger: string): void;
+  private $$updateValue(value: any) {
+    if (this.$viewValue === value) return false;
+
+    this.$modelValue = this.$viewValue = value;
+
+    return true;
+  }
 }
 
 class UpgradeNg1ComponentAdapter implements OnInit, OnChanges, DoCheck {
@@ -229,7 +259,9 @@ class UpgradeNg1ComponentAdapter implements OnInit, OnChanges, DoCheck {
   componentScope: angular.IScope;
   element: Element;
   $element: any = null;
-  ngModelController: NgModelAdaptor = null;
+  ngModelController: NgModelControllerAdaptor = null;
+  changeHandler: any;
+  touchedHandler: any;
 
   constructor(
       private linkFn: angular.ILinkFn, scope: angular.IScope, private directive: angular.IDirective,
@@ -336,6 +368,20 @@ class UpgradeNg1ComponentAdapter implements OnInit, OnChanges, DoCheck {
     }
   }
 
+  writeValue(value: any) {
+    if (!this.ngModelController) return;
+
+    this.ngModelController.$$writeValue(value);
+  }
+
+  registerOnChange(fn: any) {
+    this.changeHandler = fn;
+  }
+
+  registerOnTouched(fn: any) {
+    this.touchedHandler = fn;
+  }
+
   ngOnDestroy() {
     if (this.controllerInstance && isFunction(this.controllerInstance.$onDestroy)) {
       this.controllerInstance.$onDestroy();
@@ -370,7 +416,7 @@ class UpgradeNg1ComponentAdapter implements OnInit, OnChanges, DoCheck {
 
       // Glue Angular's ControlValueAccessor interface to AngularJS's ngModelController.
       if (name === 'ngModel') {
-        
+        this.ngModelController = new NgModelControllerAdaptor(this);
       }
 
       if (name.charAt(0) == '^') {
